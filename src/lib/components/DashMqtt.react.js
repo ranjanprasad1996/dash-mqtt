@@ -20,6 +20,9 @@ const DEFAULT_OPTIONS =  {
   }
 
 const DEFAULT_PORT = 8080; //for MQTT over websockets to mosquitto
+
+const DEFAULT_MESSAGE_PROCESSING_DELAY_MS=10;
+
 /**
  * ExampleComponent is an example component.
  * It takes a property, `label`, and
@@ -28,6 +31,11 @@ const DEFAULT_PORT = 8080; //for MQTT over websockets to mosquitto
  * which is editable by the user.
  */
 export default class DashMqtt extends Component {
+    constructor(props) {
+        super(props);
+        this.messageQueue = [];
+        this.isProcessing = false;
+    }
 
     _initMqttClient() {
         // Create a new client.
@@ -94,26 +102,43 @@ export default class DashMqtt extends Component {
             
         })
 
-        this.client.on('message', function (topic, payload, packet){
+        this.client.on('message', (topic, payload, packet) => {
+            const message = {
+                topic,
+                payload: Buffer.isBuffer(payload) ? payload.toString() : payload,
+                packet
+            };
+            this.messageQueue.push(message);
+            this._processQueue();
+        });
 
-            let my_payload = payload;
-            if (Buffer.isBuffer(payload)){
-                my_payload = payload.toString();
-            }
-            self.props.setProps({
-                incoming:{
-                    topic: topic,
-                    payload: my_payload,
-                    packet: packet
-                }
-            })
-        })
-
-        this.client.on('error', function(error){
-            console.log(error);        
-        })
+        this.client.on('error', function (error) {
+            console.log(error);
+        });
     }
 
+    _processQueue() {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+
+        const delay = this.props.message_processing_delay_ms || DEFAULT_MESSAGE_PROCESSING_DELAY_MS;
+
+        const processNext = () => {
+            if (this.messageQueue.length === 0) {
+                this.isProcessing = false;
+                return;
+            }
+
+            const { topic, payload, packet } = this.messageQueue.shift();
+            this.props.setProps({
+                incoming: { topic, payload, packet }
+            });
+
+            setTimeout(processNext, delay);
+        };
+
+        processNext();
+    }
 
     _whatChanged(prevProps){
         return Object.keys(this.props)
@@ -225,6 +250,11 @@ DashMqtt.propTypes = {
      */
     message: PropTypes.object,
 
+    /**
+     * Delay in milliseconds between processing incoming MQTT messages.
+    */
+    message_processing_delay_ms: PropTypes.number,
+
 
     /**
      * Incoming message 
@@ -237,3 +267,4 @@ DashMqtt.propTypes = {
      */
     setProps: PropTypes.func
 };
+
