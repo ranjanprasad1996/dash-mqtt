@@ -50,6 +50,7 @@ app.layout = html.Div([
 
 
 @app.callback(
+    Output('mqtt', 'callback_complete'),
     Output('return_message', 'children'),
     Input('mqtt', 'incoming')
 )
@@ -57,9 +58,9 @@ def display_incoming_message(incoming_message):
     if (incoming_message):
         print(f"Incoming message {incoming_message}")
         # time.sleep(1)
-        return incoming_message['payload']
+        return True, incoming_message['payload']
     else:
-        return dash.no_update
+        return True, dash.no_update
 
 
 if __name__ == '__main__':
